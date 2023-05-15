@@ -1,20 +1,33 @@
 'use strict'
+import { RunBlockResult, RunTxResult } from '@ethereumjs/vm'
+import { ConsensusType } from '@ethereumjs/common'
 import { Transaction, FeeMarketEIP1559Transaction } from '@ethereumjs/tx'
 import { Block } from '@ethereumjs/block'
-import { BN, bufferToHex, Address } from 'ethereumjs-util'
+import { bufferToHex, Address } from '@ethereumjs/util'
+import type { Account } from '@ethereumjs/util'
 import { EventManager } from '../eventManager'
 import { LogsManager } from './logsManager'
+import type { Transaction as InternalTransaction } from './txRunner'
+
+export type VMexecutionResult = {
+  result: RunTxResult,
+  transactionHash: string
+  block: Block,
+  tx: Transaction
+}
+
+export type VMExecutionCallBack = (error: string | Error, result?: VMexecutionResult) => void
 
 export class TxRunnerVM {
   event
   blockNumber
-  runAsync
   pendingTxs
   vmaccounts
   queusTxs
   blocks
   logsManager
   commonContext
+  blockParentHash
   nextNonceForCall: number
   getVMObject: () => any
 
@@ -25,9 +38,6 @@ export class TxRunnerVM {
     this.getVMObject = getVMObject
     this.commonContext = this.getVMObject().common
     this.blockNumber = 0
-    this.runAsync = true
-    this.blockNumber = 0 // The VM is running in Homestead mode, which started at this block.
-    this.runAsync = false // We have to run like this cause the VM Event Manager does not support running multiple txs at the same time.
     this.pendingTxs = {}
     this.vmaccounts = vmaccounts
     this.queusTxs = []
@@ -39,56 +49,41 @@ export class TxRunnerVM {
       For this to function we also need to skip nonce validation, in the vm: `{ skipNonce: true }`
     */
     this.nextNonceForCall = 0
+
+    const vm = this.getVMObject().vm
+    this.blockParentHash = vm.blockchain.genesisBlock.hash()
   }
 
-  execute (args, confirmationCb, gasEstimationForceSend, promptCb, callback) {
+  execute (args: InternalTransaction, confirmationCb, gasEstimationForceSend, promptCb, callback: VMExecutionCallBack) {
     let data = args.data
     if (data.slice(0, 2) !== '0x') {
       data = '0x' + data
     }
 
     try {
-      this.runInVm(args.from, args.to, data, args.value, args.gasLimit, args.useCall, args.timestamp, callback)
+      this.runInVm(args.from, args.to, data, args.value, args.gasLimit, args.useCall, callback)
     } catch (e) {
       callback(e, null)
     }
   }
 
-  runInVm (from, to, data, value, gasLimit, useCall, timestamp, callback) {
-    const self = this
+  runInVm (from: string, to: string, data: string, value: string, gasLimit: number, useCall: boolean, callback: VMExecutionCallBack) {
     let account
-    if (!from && useCall && Object.keys(self.vmaccounts).length) {
-      from = Object.keys(self.vmaccounts)[0]
-      account = self.vmaccounts[from]
-    } else account = self.vmaccounts[from] 
+    if (!from && useCall && Object.keys(this.vmaccounts).length) {
+      from = Object.keys(this.vmaccounts)[0]
+      account = this.vmaccounts[from]
+    } else account = this.vmaccounts[from] 
     
     if (!account) {
       return callback('Invalid account selected')
     }
-    if (Number.isInteger(gasLimit)) {
-      gasLimit = '0x' + gasLimit.toString(16)
-    }
-
-    this.getVMObject().stateManager.getAccount(Address.fromString(from)).then((res) => {
-      // See https://github.com/ethereumjs/ethereumjs-tx/blob/master/docs/classes/transaction.md#constructor
-      // for initialization fields and their types
-      if (!value) value = 0
-      if (typeof value === 'string') {
-        if (value.startsWith('0x')) value = new BN(value.replace('0x', ''), 'hex')
-        else {
-          try {
-            value = new BN(value, 10)
-          } catch (e) {
-            return callback('Unable to parse the value ' + e.message)
-          }
-        }
-      }
-
+    
+    this.getVMObject().stateManager.getAccount(Address.fromString(from)).then((res: Account) => {
       const EIP1559 = this.commonContext.hardfork() !== 'berlin' // berlin is the only pre eip1559 fork that we handle.
       let tx
       if (!EIP1559) {
         tx = Transaction.fromTxData({
-          nonce: useCall ? this.nextNonceForCall : new BN(res.nonce),
+          nonce: useCall ? this.nextNonceForCall : res.nonce,
           gasPrice: '0x1',
           gasLimit: gasLimit,
           to: to,
@@ -97,7 +92,7 @@ export class TxRunnerVM {
         }, { common: this.commonContext }).sign(account.privateKey)
       } else {
         tx = FeeMarketEIP1559Transaction.fromTxData({
-          nonce: useCall ? this.nextNonceForCall : new BN(res.nonce),
+          nonce: useCall ? this.nextNonceForCall : res.nonce,
           maxPriorityFeePerGas: '0x01',
           maxFeePerGas: '0x1',
           gasLimit: gasLimit,
@@ -109,23 +104,30 @@ export class TxRunnerVM {
       if (useCall) this.nextNonceForCall++
 
       const coinbases = ['0x0e9281e9c6a0808672eaba6bd1220e144c9bb07a', '0x8945a1288dc78a6d8952a92c77aee6730b414778', '0x94d76e24f818426ae84aa404140e8d5f60e10e7e']
-      const difficulties = [new BN('69762765929000', 10), new BN('70762765929000', 10), new BN('71762765929000', 10)]
-
+      const difficulties = [69762765929000, 70762765929000, 71762765929000]
+      const difficulty = this.commonContext.consensusType() === ConsensusType.ProofOfStake ? 0 : difficulties[this.blockNumber % difficulties.length]
+      
+      const blocknumber = this.blockNumber + 1
       const block = Block.fromBlockData({
         header: {
-          timestamp: timestamp || (new Date().getTime() / 1000 | 0),
-          number: self.blockNumber,
-          coinbase: coinbases[self.blockNumber % coinbases.length],
-          difficulty: difficulties[self.blockNumber % difficulties.length],
-          gasLimit: new BN(gasLimit.replace('0x', ''), 16).imuln(2),
-          baseFeePerGas: EIP1559 ? '0x1' : undefined
+          timestamp: new Date().getTime() / 1000 | 0,
+          number: blocknumber,
+          coinbase: coinbases[blocknumber % coinbases.length],
+          difficulty,
+          gasLimit,
+          baseFeePerGas: EIP1559 ? '0x1' : undefined,
+          parentHash: this.blockParentHash
         },
         transactions: [tx]
-      }, { common: this.commonContext })
+      }, { common: this.commonContext, hardforkByBlockNumber: false, hardforkByTTD: undefined })
 
       if (!useCall) {
-        ++self.blockNumber
-        this.runBlockInVm(tx, block, callback)
+        this.blockNumber = this.blockNumber + 1
+        this.blockParentHash = block.hash()
+        this.runBlockInVm(tx, block, (err, result) => {
+          if (!err) this.getVMObject().vm.blockchain.putBlock(block)
+          callback(err, result)
+        })
       } else {
         this.getVMObject().stateManager.checkpoint().then(() => {
           this.runBlockInVm(tx, block, (err, result) => {
@@ -141,14 +143,10 @@ export class TxRunnerVM {
   }
 
   runBlockInVm (tx, block, callback) {
-    this.getVMObject().vm.runBlock({ block: block, generate: true, skipBlockValidation: true, skipBalance: false, skipNonce: true }).then((results) => {
-      const result = results.results[0]
-      if (result) {
-        const status = result.execResult.exceptionError ? 0 : 1
-        result.status = `0x${status}`
-      }
+    this.getVMObject().vm.runBlock({ block: block, generate: true, skipBlockValidation: true, skipBalance: false, skipNonce: true }).then((results: RunBlockResult) => {
+      const result: RunTxResult = results.results[0]
       callback(null, {
-        result: result,
+        result,
         transactionHash: bufferToHex(Buffer.from(tx.hash())),
         block,
         tx

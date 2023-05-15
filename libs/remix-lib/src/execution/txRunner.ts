@@ -1,9 +1,19 @@
 'use strict'
 import { EventManager } from '../eventManager'
 
+export type Transaction = {
+  from: string,
+  to: string,
+  value: string,
+  data: string,
+  gasLimit: number,
+  useCall: boolean,
+  timestamp?: number
+  type: '0x1' | '0x2'
+}
+
 export class TxRunner {
   event
-  runAsync
   pendingTxs
   queusTxs
   opt
@@ -13,17 +23,15 @@ export class TxRunner {
     this.internalRunner = internalRunner
     this.event = new EventManager()
 
-    this.runAsync = this.opt.runAsync || true // We have to run like this cause the VM Event Manager does not support running multiple txs at the same time.
-
     this.pendingTxs = {}
     this.queusTxs = []
   }
 
-  rawRun (args, confirmationCb, gasEstimationForceSend, promptCb, cb) {
+  rawRun (args: Transaction, confirmationCb, gasEstimationForceSend, promptCb, cb) {
     run(this, args, args.timestamp || Date.now(), confirmationCb, gasEstimationForceSend, promptCb, cb)
   }
 
-  execute (args, confirmationCb, gasEstimationForceSend, promptCb, callback) {
+  execute (args: Transaction, confirmationCb, gasEstimationForceSend, promptCb, callback) {
     let data = args.data
     if (data.slice(0, 2) !== '0x') {
       data = '0x' + data
@@ -32,8 +40,8 @@ export class TxRunner {
   }
 }
 
-function run (self, tx, stamp, confirmationCb, gasEstimationForceSend = null, promptCb = null, callback = null) {
-  if (!self.runAsync && Object.keys(self.pendingTxs).length) {
+function run (self, tx: Transaction, stamp, confirmationCb, gasEstimationForceSend = null, promptCb = null, callback = null) {
+  if (Object.keys(self.pendingTxs).length) {
     return self.queusTxs.push({ tx, stamp, callback })
   }
   self.pendingTxs[stamp] = tx

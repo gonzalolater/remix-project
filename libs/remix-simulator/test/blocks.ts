@@ -18,8 +18,8 @@ describe('blocks', () => {
       const block = await web3.eth.getBlock(0)
 
       const expectedBlock = {
-        baseFeePerGas: '0x01',
-        difficulty: '69762765929000',
+        baseFeePerGas: 1,
+        difficulty: 0,
         extraData: '0x0',
         gasLimit: 8000000,
         gasUsed: 0,

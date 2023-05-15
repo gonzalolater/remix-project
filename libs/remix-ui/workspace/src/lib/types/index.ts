@@ -1,8 +1,11 @@
+/* eslint-disable @nrwl/nx/enforce-module-boundaries */
 import React from 'react'
-import { customAction } from '@remixproject/plugin-api/lib/file-system/file-panel'
-import { fileDecoration } from '@remix-ui/file-decorators';
+import { customAction } from '@remixproject/plugin-api'
+import { fileDecoration } from '@remix-ui/file-decorators'
+import { RemixAppManager } from 'libs/remix-ui/plugin-manager/src/types'
+import { ViewPlugin } from '@remixproject/engine-web'
 
-export type action = { name: string, type?: Array<'folder' | 'gist' | 'file'>, path?: string[], extension?: string[], pattern?: string[], id: string, multiselect: boolean, label: string, sticky?: boolean }
+export type action = { name: string, type?: Array<'folder' | 'gist' | 'file' | 'workspace'>, path?: string[], extension?: string[], pattern?: string[], id: string, multiselect: boolean, label: string, sticky?: boolean }
 export interface JSONStandardInput {
   language: "Solidity";
   settings?: any,
@@ -16,32 +19,7 @@ export interface JSONStandardInput {
 export type MenuItems = action[]
 export type WorkspaceTemplate = 'gist-template' | 'code-template' | 'remixDefault' | 'blank' | 'ozerc20' | 'zeroxErc20' | 'ozerc721'
 export interface WorkspaceProps {
-  plugin: {
-    setWorkspace: ({ name: string, isLocalhost: boolean }, setEvent: boolean) => void,
-    createWorkspace: (name: string, workspaceTemplateName: string) => void,
-    renameWorkspace: (oldName: string, newName: string) => void
-    workspaceRenamed: ({ name: string }) => void,
-    workspaceCreated: ({ name: string }) => void,
-    workspaceDeleted: ({ name: string }) => void,
-    workspace: any // workspace provider,
-    browser: any // browser provider
-    localhost: any // localhost provider
-    fileManager : any
-    registry: any // registry
-    request: {
-      createWorkspace: () => void,
-      setWorkspace: (workspaceName: string) => void,
-      createNewFile: () => void,
-      uploadFile: (target: EventTarget & HTMLInputElement) => void,
-      getCurrentWorkspace: () => void
-    } // api request,
-    workspaces: any,
-    registeredMenuItems: MenuItems // menu items
-    removedMenuItems: MenuItems
-    initialWorkspace: string,
-    resetNewFile: () => void,
-    getWorkspaces: () => string[]
-  }
+  plugin: FilePanelType
 }
 export interface WorkspaceState {
   hideRemixdExplorer: boolean
@@ -67,6 +45,36 @@ export interface FileType {
   child?: File[]
 }
 
+export interface FilePanelType extends ViewPlugin {
+    setWorkspace: ({ name, isLocalhost }, setEvent: boolean) => void,
+    createWorkspace: (name: string, workspaceTemplateName: string) => void,
+    renameWorkspace: (oldName: string, newName: string) => void
+    compileContractForUml: (path: string) => void
+    workspaceRenamed: ({ name }) => void,
+    workspaceCreated: ({ name }) => void,
+    workspaceDeleted: ({ name }) => void,
+    workspace?: any // workspace provider,
+    browser?: any // browser provider
+    localhost?: any // localhost provider
+    fileManager? : any
+    appManager: RemixAppManager
+    registry?: any // registry
+    pluginApi?: any
+    request: {
+      createWorkspace: () => void,
+      setWorkspace: (workspaceName: string) => void,
+      createNewFile: () => void,
+      uploadFile: (target: EventTarget & HTMLInputElement) => void,
+      getCurrentWorkspace: () => void
+    } // api request,
+    workspaces: any,
+    registeredMenuItems: MenuItems // menu items
+    removedMenuItems: MenuItems
+    initialWorkspace: string,
+    resetNewFile: () => void,
+    getWorkspaces: () => string[]
+  }
+
 /* eslint-disable-next-line */
 export interface FileExplorerProps {
     name: string,
@@ -74,6 +82,7 @@ export interface FileExplorerProps {
     contextMenuItems: MenuItems,
     removedContextMenuItems: MenuItems,
     files: { [x: string]: Record<string, FileType> },
+    workspaceState: WorkSpaceState,
     fileState: fileDecoration[],
     expandPath: string[],
     focusEdit: string,
@@ -88,7 +97,9 @@ export interface FileExplorerProps {
     toast: (toasterMsg: string) => void,
     dispatchDeletePath: (path: string[]) => Promise<void>,
     dispatchRenamePath: (oldPath: string, newPath: string) => Promise<void>,
+    dispatchDownloadPath: (path: string) => Promise<void>,
     dispatchUploadFile: (target?: React.SyntheticEvent, targetFolder?: string) => Promise<void>,
+    dispatchUploadFolder: (target?: React.SyntheticEvent, targetFolder?: string) => Promise<void>,
     dispatchCopyFile: (src: string, dest: string) => Promise<void>,
     dispatchCopyFolder: (src: string, dest: string) => Promise<void>,
     dispatchRunScript: (path: string) => Promise<void>,
@@ -101,7 +112,19 @@ export interface FileExplorerProps {
     dispatchAddInputField:(path: string, type: 'file' | 'folder') => Promise<void>,
     dispatchHandleExpandPath: (paths: string[]) => Promise<void>,
     dispatchMoveFile: (src: string, dest: string) => Promise<void>,
-    dispatchMoveFolder: (src: string, dest: string) => Promise<void>
+    dispatchMoveFolder: (src: string, dest: string) => Promise<void>,
+    handlePasteClick: (dest: string, destType: string) => void
+    handleCopyClick: (path: string, type: 'folder' | 'gist' | 'file' | 'workspace') => void
+    addMenuItems: (items: MenuItems) => void
+    removeMenuItems: (items: MenuItems) => void
+    handleContextMenu: (pageX: number, pageY: number, path: string, content: string, type: string) => void
+    uploadFile: (target) => void
+    uploadFolder: (target) => void
+    getFocusedFolder: () => string
+    editModeOn: (path: string, type: string, isNew: boolean) => void
+    toGist: (path?: string, type?: string) => void
+    handleNewFileInput: (parentFolder?: string) => Promise<void>
+    handleNewFolderInput: (parentFolder?: string) => Promise<void>
 }
 type Placement = import('react-overlays/usePopper').Placement
 export interface FileExplorerMenuProps {
@@ -111,6 +134,7 @@ export interface FileExplorerMenuProps {
     createNewFolder: (parentFolder?: string) => void,
     publishToGist: (path?: string) => void,
     uploadFile: (target: EventTarget & HTMLInputElement) => void
+    uploadFolder: (target: EventTarget & HTMLInputElement) => void
     tooltipPlacement?: Placement
 }
 export interface FileExplorerContextMenuProps {
@@ -119,6 +143,7 @@ export interface FileExplorerContextMenuProps {
     createNewFolder: (parentFolder?: string) => void,
     deletePath: (path: string | string[]) => void,
     renamePath: (path: string, type: string) => void,
+    downloadPath: (path: string) => void,
     hideContextMenu: () => void,
     publishToGist?: (path?: string, type?: string) => void,
     pushChangesToGist?: (path?: string, type?: string) => void,
@@ -136,27 +161,24 @@ export interface FileExplorerContextMenuProps {
     paste?: (destination: string, type: string) => void
     copyFileName?: (path: string, type: string) => void
     copyPath?: (path: string, type: string) => void
+    generateUml?: (path: string) => Promise<void>
+    uploadFile?: (target: EventTarget & HTMLInputElement) => void
 }
 
-export interface FileExplorerState {
+export interface WorkSpaceState {
     ctrlKey: boolean
     newFileName: string
     actions: {
       id: string
       name: string
-      type?: Array<'folder' | 'gist' | 'file'>
+      type?: Array<'folder' | 'gist' | 'file' | 'workspace'>
       path?: string[]
       extension?: string[]
       pattern?: string[]
       multiselect: boolean
       label: string
     }[]
-    focusContext: {
-      element: string
-      x: number
-      y: number
-      type: string
-    }
+    focusContext: FileFocusContextType
     focusEdit: {
       element: string
       type: string
@@ -166,8 +188,17 @@ export interface FileExplorerState {
     mouseOverElement: string
     showContextMenu: boolean
     reservedKeywords: string[]
-    copyElement: {
-      key: string
-      type: 'folder' | 'gist' | 'file'
-    }[]
+    copyElement: CopyElementType[]
   }
+
+export type  FileFocusContextType = {
+  element: string
+  x: number
+  y: number
+  type: string
+}
+
+export type CopyElementType = {
+  key: string
+  type: 'folder' | 'gist' | 'file' | 'workspace'
+}

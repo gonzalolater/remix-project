@@ -50,7 +50,7 @@ Note: It contains the latest supported version of Solidity available at the time
 *Supported versions:*
 ```bash
 "engines": {
-    "node": "^14.17.6",
+    "node": "^20.0.0",
     "npm": "^6.14.15"
   }
 ```
@@ -118,7 +118,7 @@ docker-compose pull
 docker-compose up -d
 ```
 
-Then go to http://localhost:8080 and you can use you Remix instance.
+Then go to http://localhost:8080 and you can use your Remix instance.
 
 To fetch the docker-compose file without cloning this repo run:
 ```

@@ -2,15 +2,15 @@ import React, { useEffect, useState, useRef, useReducer } from 'react' // eslint
 import { FormattedMessage, useIntl } from 'react-intl'
 import semver from 'semver'
 import { CompilerContainerProps } from './types'
-import { ConfigurationSettings } from '@remix-project/remix-lib-ts'
+import { ConfigurationSettings } from '@remix-project/remix-lib'
 import { checkSpecialChars, CustomTooltip, extractNameFromKey } from '@remix-ui/helper'
-import { canUseWorker, baseURLBin, baseURLWasm, urlFromVersion, pathToURL, promisedMiniXhr } from '@remix-project/remix-solidity'
-
+import { canUseWorker, baseURLBin, baseURLWasm, urlFromVersion, pathToURL } from '@remix-project/remix-solidity'
 import { compilerReducer, compilerInitialState } from './reducers/compiler'
 import { resetEditorMode, listenToEvents } from './actions/compiler'
 import { getValidLanguage } from '@remix-project/remix-solidity'
 import { CopyToClipboard } from '@remix-ui/clipboard'
 import { configFileContent } from './compilerConfiguration'
+import axios, { AxiosResponse } from 'axios'
 
 import './css/style.css'
 const defaultPath = "compiler_config.json"
@@ -21,7 +21,6 @@ declare global {
     _paq: any
   }
 }
-
 const _paq = window._paq = window._paq || [] //eslint-disable-line
 
 export const CompilerContainer = (props: CompilerContainerProps) => {
@@ -52,7 +51,7 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
     customVersions: [],
     compilerLicense: null,
     selectedVersion: null,
-    defaultVersion: 'soljson-v0.8.7+commit.e28d00a7.js', // this default version is defined: in makeMockCompiler (for browser test)
+    defaultVersion: 'soljson-v0.8.18+commit.87f61d96.js', // this default version is defined: in makeMockCompiler (for browser test)
     runs: '',
     compiledFileName: '',
     includeNightlies: false,
@@ -282,6 +281,7 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
           'New configuration file', `The file "${configFilePathInput.current.value}" you entered does not exist. Do you want to create a new one?`,
           'Create',
           async () => await createNewConfigFile(),
+          false,
           'Cancel',
           () => {
             setShowFilePathInput(false)
@@ -302,15 +302,15 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
     let selectedVersion, allVersionsWasm, isURL
     let allVersions = [{ path: 'builtin', longVersion: 'latest local version - ' + state.defaultVersion }]
     // fetch normal builds
-    const binRes: any = await promisedMiniXhr(`${baseURLBin}/list.json`)
+    const binRes: AxiosResponse = await axios(`${baseURLBin}/list.json`)
     // fetch wasm builds
-    const wasmRes: any = await promisedMiniXhr(`${baseURLWasm}/list.json`)
-    if (binRes.event.type === 'error' && wasmRes.event.type === 'error') {
+    const wasmRes: AxiosResponse = await axios(`${baseURLWasm}/list.json`)
+    if (binRes.status !== 200 && wasmRes.status !== 200) {
       selectedVersion = 'builtin'
       return callback(allVersions, selectedVersion)
     }
     try {
-      const versions = JSON.parse(binRes.json).builds.slice().reverse()
+      const versions = binRes.data.builds.slice().reverse()
 
       allVersions = [...allVersions, ...versions]
       selectedVersion = state.defaultVersion
@@ -331,8 +331,8 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
           if (selectedVersionArr.length) selectedVersion = selectedVersionArr[0].path
         }
       }
-      if (wasmRes.event.type !== 'error') {
-        allVersionsWasm = JSON.parse(wasmRes.json).builds.slice().reverse()
+      if (wasmRes.status === 200) {
+        allVersionsWasm = wasmRes.data.builds.slice().reverse()
       }
     } catch (e) {
       tooltip('Cannot load compiler version list. It might have been blocked by an advertisement blocker. Please try deactivating any of them from this page and reload. Error: ' + e)
@@ -581,6 +581,7 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
       promptMessage('URL'),
       'OK',
       addCustomCompiler,
+      false,
       'Cancel',
       () => {}
     )
@@ -732,7 +733,6 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
     setToggleExpander(!toggleExpander)
   }
 
-
   return (
     <section>
       <article>
@@ -855,7 +855,7 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
                 <FormattedMessage id='solidity.language' />
               </label>
               <CustomTooltip
-                placement="right-start"
+                placement="right"
                 tooltipId="compilerLabelTooltip"
                 tooltipClasses="text-nowrap"
                 tooltipText={<span>{'Language specification available from   Compiler >= v0.5.7'}</span>}
@@ -941,13 +941,14 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
               placement="auto"
               tooltipId="overlay-tooltip-compile"
               tooltipText={<div className="text-left">
-                  {!(configFilePath === '' && state.useFileConfiguration) && <div><b>Ctrl+S</b> for compiling</div>}
+                  {!(configFilePath === '' && state.useFileConfiguration) && <div><b>Ctrl+S</b> to compile {state.compiledFileName.endsWith('.sol') ? state.compiledFileName : null} </div>}
                   {(configFilePath === '' && state.useFileConfiguration) && <div> No config file selected</div>}
                 </div>}
             >
               <div className="d-flex align-items-center justify-content-center">
-                { <i ref={compileIcon} className="fas fa-sync remixui_iconbtn ml-2" aria-hidden="true"></i> }
-                <div className="d-flex justify-content-between align-items-center">
+                { <i ref={compileIcon} className="fas fa-sync mr-2" aria-hidden="true"></i> }
+                <div className="text-truncate overflow-hidden text-nowrap"
+                >
                   <span>
                     <FormattedMessage id='solidity.compile' />
                   </span>
@@ -969,7 +970,7 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
             <button
               id="compileAndRunBtn"
               data-id="compilerContainerCompileAndRunBtn"
-              className="btn btn-secondary btn-block d-block w-100 text-break remixui_solidityCompileAndRunButton d-inline-block remixui_disabled mb-1 mt-3"
+              className="btn btn-secondary btn-block d-block w-100 text-break remixui_solidityCompileAndRunButton d-inline-block remixui_disabled mb-1 mt-1"
               onClick={compileAndRun}
               disabled={(configFilePath === '' && state.useFileConfiguration) || disableCompileButton}
             >
@@ -977,9 +978,9 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
                 placement="right"
                 tooltipId="overlay-tooltip-compile-run"
                 tooltipText={<div className="text-left">
-                    {!(configFilePath === '' && state.useFileConfiguration) && <div><b>Ctrl+Shift+S</b> for compiling and script execution</div>}
-                    {(configFilePath === '' && state.useFileConfiguration) && <div> No config file selected</div>}
-                  </div>}
+                  {!(configFilePath === '' && state.useFileConfiguration) && <div><b>Ctrl+Shift+S</b> for compiling and script execution</div>}
+                  {(configFilePath === '' && state.useFileConfiguration) && <div> No config file selected</div>}
+                </div>}
               >
                 <span>
                   <FormattedMessage id='solidity.compileAndRunScript' />
@@ -987,27 +988,28 @@ export const CompilerContainer = (props: CompilerContainerProps) => {
               </CustomTooltip>
             </button>
             <CustomTooltip
-              placement="right"
+              placement="top"
               tooltipId="overlay-tooltip-compile-run-doc"
               tooltipText={<div className="text-left p-2">
-                  <div>Choose the script to execute right after compilation by adding the `dev-run-script` natspec tag, as in:</div>
-                  <pre>
-                    <code>
-                    /**<br />
-                      * @title ContractName<br />
-                      * @dev ContractDescription<br />
-                      * @custom:dev-run-script file_path<br />
-                      */<br />
-                      contract ContractName {'{}'}<br />
-                    </code>
-                  </pre>
-                  Click the i icon to learn more
-                </div>}
+                <div>Choose the script to execute right after compilation
+                  by adding the `dev-run-script` natspec tag, as in:</div>
+                <pre>
+                  <code>
+                  /**<br />
+                    * @title ContractName<br />
+                    * @dev ContractDescription<br />
+                    * @custom:dev-run-script file_path<br />
+                    */<br />
+                    contract ContractName {'{}'}<br />
+                  </code>
+                </pre>
+                Click the "i" icon to learn more
+              </div>}
             >
-              <a href="https://remix-ide.readthedocs.io/en/latest/running_js_scripts.html#compile-a-contract-and-run-a-script-on-the-fly" target="_blank" ><i className="pl-2 ml-2 mt-3 mb-1 fas fa-info text-dark"></i></a>
+              <a href="https://remix-ide.readthedocs.io/en/latest/running_js_scripts.html#compile-a-contract-and-run-a-script-on-the-fly" target="_blank" ><i className="pl-2 ml-2 fas fa-info text-dark"></i></a>
             </CustomTooltip>
             <CopyToClipboard tip="Click to copy the custom NatSpec tag" getContent={() => '@custom:dev-run-script file_path'} direction='top'>
-              <button className="btn remixui_copyButton  ml-2 mt-3 mb-1 text-dark">
+              <button className="btn remixui_copyButton  ml-2 my-1 text-dark">
                 <i className="remixui_copyIcon far fa-copy" aria-hidden="true"></i>
               </button>
             </CopyToClipboard>

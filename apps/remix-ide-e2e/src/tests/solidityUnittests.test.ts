@@ -48,7 +48,7 @@ module.exports = {
       .waitForElementPresent('*[data-id="testTabGenerateTestFile"]')
       .click('*[data-id="testTabGenerateTestFile"]')
       .clickLaunchIcon('filePanel')
-      .waitForElementPresent('*[title="default_workspace/tests/simple_storage_test.sol"]')
+      .waitForElementPresent('*[data-path="default_workspace/tests/simple_storage_test.sol"]')
       .removeFile('tests/simple_storage_test.sol', 'default_workspace')
   },
 
@@ -106,7 +106,7 @@ module.exports = {
   'Should fail on compilation, open file on error click, not disappear error #group2': function (browser: NightwatchBrowser) {
     browser.waitForElementPresent('*[data-id="verticalIconsKindfilePanel"]')
       .addFile('tests/compilationError_test.sol', sources[0]['compilationError_test.sol'])
-      .click('div[title="default_workspace/tests/compilationError_test.sol"] span[class="close-tabs"]')
+      .click('div[data-path="default_workspace/tests/compilationError_test.sol"] span[class="close-tabs"]')
       .clickLaunchIcon('solidityUnitTesting')
       .pause(2000)
       .click('*[data-id="testTabCheckAllTests"]')
@@ -308,16 +308,22 @@ module.exports = {
       .waitForElementContainsText('*[data-id="functionPanel"]', 'checkWinningProposalPassed()', 60000)
       // remix_test.sol should be opened in editor
       .getEditorValue((content) => browser.assert.ok(content.indexOf('library Assert {') !== -1))
-      .clickLaunchIcon('solidityUnitTesting')
+      .click('*[id="debuggerTransactionStartButtonContainer"]') // stop debugging
+      .openFile('tests/ballotFailedDebug_test.sol')
+      .pause(2000)
+      .clickLaunchIcon('solidityUnitTesting').pause(2000)
       .waitForElementPresent('#Check_winning_proposal_again')
       .scrollAndClick('#Check_winning_proposal_again')
+      .pause(5000)
       .waitForElementContainsText('*[data-id="sidePanelSwapitTitle"]', 'DEBUGGER', 60000)
-      .waitForElementContainsText('*[data-id="functionPanel"]', 'checkWinningProposalAgain()', 60000)
       .goToVMTraceStep(1151)
       .waitForElementContainsText('*[data-id="functionPanel"]', 'equal(a, b, message)', 60000)
       .waitForElementContainsText('*[data-id="functionPanel"]', 'checkWinningProposalAgain()', 60000)
       //.pause(5000)
-      .clickLaunchIcon('solidityUnitTesting')
+      .click('*[id="debuggerTransactionStartButtonContainer"]') // stop debugging
+      .openFile('tests/ballotFailedDebug_test.sol')
+      .pause(2000)
+      .clickLaunchIcon('solidityUnitTesting').pause(2000)
       .pause(5000)
       .scrollAndClick('#Check_winnin_proposal_with_return_value')
       .pause(5000)

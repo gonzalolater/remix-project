@@ -1,3 +1,4 @@
+import { SolcInput, SolcOutput } from "@openzeppelin/upgrades-core"
 export interface FuncABI {
     name: string,
     type: string,
@@ -5,6 +6,11 @@ export interface FuncABI {
     stateMutability: string,
     payable?: boolean,
     constant?: any
+}
+
+export type OverSizeLimit = {
+    overSizeEip3860: boolean,
+    overSizeEip170: boolean
 }
 
 export interface ContractData {
@@ -18,8 +24,9 @@ export interface ContractData {
     deployedBytecode: any,
     getConstructorInterface: () => any,
     getConstructorInputs: () => any,
-    isOverSizeLimit: () => boolean,
-    metadata: any
+    isOverSizeLimit: (args: string) => Promise<OverSizeLimit>,
+    metadata: any,
+    contractName?: string
 }
 
 export interface ContractAST {
@@ -182,4 +189,22 @@ export interface ContractSources {
         id: number
       }
     }
+  }
+
+  export interface NetworkDeploymentFile {
+        id: string,
+        network: string,
+        deployments: {
+            [proxyAddress: string]: {
+                date: Date,
+                contractName: string,
+                fork: string,
+                implementationAddress: string
+            }
+        }[]
+  }
+
+  export interface SolcBuildFile {
+    solcInput: SolcInput,
+    solcOutput: SolcOutput
   }

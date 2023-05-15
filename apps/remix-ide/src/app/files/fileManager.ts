@@ -1,11 +1,13 @@
 'use strict'
+import { saveAs } from 'file-saver'
+import JSZip from 'jszip'
 import { Plugin } from '@remixproject/engine'
 import * as packageJson from '../../../../../package.json'
 import Registry from '../state/registry'
 import { EventEmitter } from 'events'
-import { RemixAppManager } from '../../../../../libs/remix-ui/plugin-manager/src/types'
 import { fileChangedToastMsg, recursivePasteToastMsg, storageFullMessage } from '@remix-ui/helper'
 import helper from '../../lib/helper.js'
+import { RemixAppManager } from '../../remixAppManager'
 
 /*
   attach to files event (removed renamed)
@@ -343,6 +345,36 @@ class FileManager extends Plugin {
     }
   }
 
+  async zipDir(dirPath, zip) {
+    const filesAndFolders = await this.readdir(dirPath)
+    for(let path in filesAndFolders) {
+      if (filesAndFolders[path].isDirectory) await this.zipDir(path, zip)
+      else {
+        path = this.normalize(path)
+        const content: any = await this.readFile(path)
+        zip.file(path, content)
+      }
+    }
+  }
+
+  async download(path) {
+    try {
+      const downloadFileName = helper.extractNameFromKey(path)
+      if (await this.isDirectory(path)) {
+          const zip = new JSZip()
+          await this.zipDir(path, zip)
+          const content = await zip.generateAsync({type: 'blob'})
+          saveAs(content, `${downloadFileName}.zip`)
+        } else {
+          path = this.normalize(path)
+          const content: any = await this.readFile(path)
+          saveAs(new Blob([content]), downloadFileName)
+        }
+    } catch (e) {
+      throw new Error(e)
+    }
+  }
+
   /**
    * Create a directory
    * @param {string} path path of the new directory
@@ -365,9 +397,9 @@ class FileManager extends Plugin {
   /**
    * Get the list of files in the directory
    * @param {string} path path of the directory
-   * @returns {string[]} list of the file/directory name in this directory
+   * @returns {Object} list of the file/directory name in this directory e.g; {contracts/1_Storage.sol:{isDirectory: false}}
    */
-  async readdir(path) {
+  async readdir(path): Promise<Record<string, Record<string, boolean>>> {
     try {
       path = this.normalize(path)
       path = this.limitPluginScope(path)
@@ -530,7 +562,7 @@ class FileManager extends Plugin {
 
   async setFileContent(path, content) {
     if (this.currentRequest) {
-      const canCall = await this.askUserPermission('writeFile', '')
+      const canCall = await this.askUserPermission(`writeFile`, `modifying ${path} ...`)
       const required = this.appManager.isRequired(this.currentRequest.from)
       if (canCall && !required) {
         // inform the user about modification after permission is granted and even if permission was saved before
@@ -623,13 +655,15 @@ class FileManager extends Plugin {
       file = resolved.file
       await this.saveCurrentFile()
       if (this.currentFile() === file) return
+      
       const provider = resolved.provider
       this._deps.config.set('currentFile', file)
       this.openedFiles[file] = file
 
       let content = ''
       try {
-        content = await provider.get(file)   
+        content = await provider.get(file)
+        
       } catch (error) {
         console.log(error)
         throw error
@@ -761,7 +795,7 @@ class FileManager extends Plugin {
     if (provider) {
       try{
         const content = await provider.get(currentFile)
-        if(content) this.editor.setText(content)
+        if(content) this.editor.setText(currentFile, content)
       }catch(error){
         console.log(error)
       }

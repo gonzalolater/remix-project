@@ -29,21 +29,7 @@ module.exports = {
       .clickLaunchIcon('solidity')
       .click('[data-id="compilerContainerCompileBtn"]')
       .isVisible({
-        selector: "//span[contains(.,'not found Untitled11')]",
-        locateStrategy: 'xpath',
-        timeout: 120000,
-        suppressNotFoundErrors: true
-      })
-      .click('[data-id="compilerContainerCompileBtn"]')
-      .isVisible({
-        selector: "//span[contains(.,'not found Untitled11')]",
-        locateStrategy: 'xpath',
-        timeout: 120000,
-        suppressNotFoundErrors: true
-      })
-      .click('[data-id="compilerContainerCompileBtn"]')
-      .waitForElementVisible({
-        selector: "//span[contains(.,'not found Untitled11')]",
+        selector: "//span[contains(.,'not found /Untitled11')]",
         locateStrategy: 'xpath',
         timeout: 120000,
       })
@@ -126,7 +112,31 @@ module.exports = {
         timeout: 120000,
       })
       .verifyContracts(['test13', 'ERC20'], { wait: 30000 })
-      .end()
+  },
+
+  'Test NPM Import (the version is specified in package.json) #group4': function (browser: NightwatchBrowser) {
+    browser
+      // clone https://github.com/yann300/remix-reward
+      .clickLaunchIcon('filePanel')
+      .waitForElementVisible('[data-id="workspaceMenuDropdown"]')
+      .click('[data-id="workspaceMenuDropdown"]')
+      .waitForElementVisible('[data-id="workspaceclone"]')
+      .click('[data-id="workspaceclone"]')
+      .waitForElementVisible('[data-id="fileSystemModalDialogModalBody-react"]')
+      .click('[data-id="fileSystemModalDialogModalBody-react"]')
+      .waitForElementVisible('[data-id="modalDialogCustomPromptTextClone"]')
+      .setValue('[data-id="modalDialogCustomPromptTextClone"]', 'https://github.com/yann300/remix-reward')
+      .click('[data-id="fileSystem-modal-footer-ok-react"]')
+      .waitForElementPresent('.fa-spinner')
+      .pause(5000)
+      .waitForElementNotPresent('.fa-spinner')
+      .waitForElementVisible('*[data-id="treeViewLitreeViewItem.git"]')
+      .waitForElementContainsText('[data-id="workspacesSelect"]', 'remix-reward')
+      .clickLaunchIcon('solidity')
+      // compile (this will be using the version specified in the package.json)
+      .openFile('contracts')
+      .openFile('contracts/RemixRewardUpgradable.sol')
+      .verifyContracts(['Remix'])
   }
 }
 
@@ -135,11 +145,11 @@ const sources = [
     'Untitled.sol': { content: 'contract test1 {} contract test2 {}' }
   },
   {
-    'Untitled1.sol': { content: 'import "./Untitled2.sol"; contract test6 {}' },
+    'Untitled1.sol': { content: 'import "/Untitled2.sol"; contract test6 {}' },
     'Untitled2.sol': { content: 'contract test4 {} contract test5 {}' }
   },
   {
-    'Untitled3.sol': { content: 'import "./Untitled11.sol"; contract test6 {}' }
+    'Untitled3.sol': { content: 'import "/Untitled11.sol"; contract test6 {}' }
   },
   {
     'Untitled4.sol': { content: 'import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol"; contract test7 {}' }

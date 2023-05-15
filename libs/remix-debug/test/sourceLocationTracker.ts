@@ -12,7 +12,7 @@ tape('SourceLocationTracker', function (t) {
   t.test('SourceLocationTracker.getSourceLocationFromVMTraceIndex - simple contract', async function (st) {
 
     const traceManager = new TraceManager({web3: web3Test})
-    let codeManager = new CodeManager(traceManager)     
+    const codeManager = new CodeManager(traceManager)     
 
     let output = compiler.compile(compilerInput(contracts))
     output = JSON.parse(output)
@@ -43,7 +43,7 @@ tape('SourceLocationTracker', function (t) {
   t.test('SourceLocationTracker.getSourceLocationFromVMTraceIndex - ABIEncoder V2 contract', async function (st) {
 
     const traceManager = new TraceManager({web3: web3Test})
-    let codeManager = new CodeManager(traceManager)     
+    const codeManager = new CodeManager(traceManager)     
 
     let output = compiler.compile(compilerInput(ABIEncoderV2))
     output = JSON.parse(output)
@@ -95,7 +95,7 @@ tape('SourceLocationTracker', function (t) {
 
         map = await sourceLocationTracker.getValidSourceLocationFromVMTraceIndex('0x0d3a18d64dfe4f927832ab58d6451cecc4e517c5', 45, output.contracts)
         st.equal(map['file'], 1) // 1 refers to the generated source (pragma experimental ABIEncoderV2)
-        st.equal(map['start'], 1293)
+        st.equal(map['start'], 1297)
         st.equal(map['length'], 32)
 
         map = await sourceLocationTracker.getValidSourceLocationFromVMTraceIndex('0x0d3a18d64dfe4f927832ab58d6451cecc4e517c5', 36, output.contracts)
